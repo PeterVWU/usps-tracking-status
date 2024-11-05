@@ -165,7 +165,7 @@ async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
 	const response = await fetch(
 		`https://shipstation-proxy.info-ba2.workers.dev/shipments?shipDateStart=${dateStr}`
 	);
-
+	console.log('shipstation response', response)
 	const data = await response.json();
 	return (data as any).shipments.map((shipment: any) => ({
 		trackingNumber: shipment.trackingNumber,
