@@ -179,7 +179,7 @@ async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
 			'Content-Type': 'application/json'
 		}
 	});
-
+	console.log('shipstationrespoonse', JSON.stringify(response))
 	if (!response.ok) {
 		const text = await response.text();
 		throw new Error(`ShipStation API error: ${response.status} - ${text}`);
