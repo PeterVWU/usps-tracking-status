@@ -83,6 +83,7 @@ export default {
 	},
 	// Scheduled task to fetch from ShipStation
 	async scheduled(controller, env, ctx) {
+		console.log('schedule starts')
 		try {
 			const shipments = await fetchNewShipments(env);
 			await storeNewTrackingNumbers(shipments, env.STATUS_DB);
