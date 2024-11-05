@@ -4,6 +4,11 @@ main = "src/index.ts"
 compatibility_date = "2024-10-22"
 compatibility_flags = ["nodejs_compat"]
 
+[[d1_databases]]
+binding = "STATUS_DB"
+database_name = "usps-tracking-status-db"
+database_id = "71f56191-c1ae-48b3-beff-31b64ce6f249"
+
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
 # Configuration: https://developers.cloudflare.com/workers/observability/logs/workers-logs/#enable-workers-logs
