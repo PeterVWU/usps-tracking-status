@@ -26,7 +26,6 @@ interface TrackingNumber {
 
 interface ShipmentData {
 	trackingNumber: string;
-	carrierCode: string;
 	orderNumber: string;
 }
 
@@ -170,10 +169,16 @@ async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
 	const yesterday = new Date();
 	yesterday.setDate(yesterday.getDate() - 1);
 	const dateStr = yesterday.toISOString().split('T')[0];
+	console.log('dateStr', dateStr)
 	const url = `https://shipstation-proxy.info-ba2.workers.dev/shipments?shipDateStart=${dateStr}`;
 	console.log('shipstation url', url);
 
-	const response = await fetch(url);
+	const response = await fetch(url, {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json'
+		}
+	});
 
 	if (!response.ok) {
 		const text = await response.text();
@@ -188,7 +193,6 @@ async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
 		return data.shipments.map(shipment => ({
 			trackingNumber: shipment.trackingNumber,
 			orderNumber: shipment.orderNumber,
-			carrierCode: 'USPS' // Default carrier code since it's not in the response
 		}));
 	} catch (error: any) {
 		throw new Error(`Failed to parse ShipStation response: ${error?.message || 'Unknown error'}`);
