@@ -30,10 +30,16 @@ interface ShipmentData {
 	orderNumber: string;
 }
 
-
 interface StatusUpdate {
 	tracking_number: string;
 	status: string;
+}
+
+interface ShipStationResponse {
+	shipments: Array<{
+		trackingNumber: string;
+		orderNumber: string;
+	}>;
 }
 
 // CORS headers configuration
@@ -74,16 +80,19 @@ export default {
 
 		// Add a test endpoint for scheduled job
 		if (url.pathname === '/test-scheduled') {
-			const shipments = await fetchNewShipments(env);
-			await storeNewTrackingNumbers(shipments, env.STATUS_DB);
-			return Response.json({ shipments });
+			try {
+				const shipments = await fetchNewShipments(env);
+				await storeNewTrackingNumbers(shipments, env.STATUS_DB);
+				return Response.json({ shipments });
+			} catch (error: any) {
+				return Response.json({ error: error?.message || 'An unknown error occurred' }, { status: 500 });
+			}
 		}
 
 		return new Response('Not found', { status: 404 });
 	},
 	// Scheduled task to fetch from ShipStation
 	async scheduled(controller, env, ctx) {
-		console.log('schedule starts')
 		try {
 			const shipments = await fetchNewShipments(env);
 			await storeNewTrackingNumbers(shipments, env.STATUS_DB);
@@ -100,7 +109,7 @@ async function handleGetTrackingUrls(env: Env) {
 		const result = await env.STATUS_DB.prepare(`
 			SELECT tracking_number 
 			FROM tracking_numbers 
-			WHERE status != 'Delivered'
+			WHERE status != 'delivered'
 			LIMIT 300
 		`).all<TrackingNumber>();
 
@@ -161,16 +170,29 @@ async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
 	const yesterday = new Date();
 	yesterday.setDate(yesterday.getDate() - 1);
 	const dateStr = yesterday.toISOString().split('T')[0];
-	console.log('shipstation url', `https://shipstation-proxy.info-ba2.workers.dev/shipments?shipDateStart=${dateStr}`)
-	const response = await fetch(
-		`https://shipstation-proxy.info-ba2.workers.dev/shipments?shipDateStart=${dateStr}`
-	);
-	console.log('shipstation response', response)
-	const data = await response.json();
-	return (data as any).shipments.map((shipment: any) => ({
-		trackingNumber: shipment.trackingNumber,
-		orderNumber: shipment.orderNumber
-	}));
+	const url = `https://shipstation-proxy.info-ba2.workers.dev/shipments?shipDateStart=${dateStr}`;
+	console.log('shipstation url', url);
+
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		const text = await response.text();
+		throw new Error(`ShipStation API error: ${response.status} - ${text}`);
+	}
+
+	try {
+		const data = await response.json() as ShipStationResponse;
+		if (!data.shipments) {
+			throw new Error('Invalid response format: missing shipments array');
+		}
+		return data.shipments.map(shipment => ({
+			trackingNumber: shipment.trackingNumber,
+			orderNumber: shipment.orderNumber,
+			carrierCode: 'USPS' // Default carrier code since it's not in the response
+		}));
+	} catch (error: any) {
+		throw new Error(`Failed to parse ShipStation response: ${error?.message || 'Unknown error'}`);
+	}
 }
 
 async function storeNewTrackingNumbers(shipments: ShipmentData[], db: D1Database) {
