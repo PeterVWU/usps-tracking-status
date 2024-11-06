@@ -204,7 +204,7 @@ async function handleGetTrackingUrls(env: Env) {
 			SELECT tracking_number 
 			FROM tracking_numbers 
 			WHERE status != 'delivered'
-			LIMIT 300
+			LIMIT 1000
 		`).all<TrackingNumber>();
 
 		const trackingNumbers = result.results.map(row => row.tracking_number);
