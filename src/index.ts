@@ -13,6 +13,8 @@
 
 interface Env {
 	STATUS_DB: D1Database;
+	SHIPSTATION_API_KEY: string;
+	SHIPSTATION_API_SECRET: string;
 }
 
 // Define types for our database rows
@@ -170,12 +172,13 @@ async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
 	yesterday.setDate(yesterday.getDate() - 1);
 	const dateStr = yesterday.toISOString().split('T')[0];
 	console.log('dateStr', dateStr)
-	const url = `https://shipstation-proxy.info-ba2.workers.dev/shipments?shipDateStart=${dateStr}`;
+	const url = `https://ssapi.shipstation.com/shipments?shipDateStart=${dateStr}`;
 	console.log('shipstation url', url);
-
+	const credentials = btoa(`${env.SHIPSTATION_API_KEY}:${env.SHIPSTATION_API_SECRET}`);
 	const response = await fetch(url, {
 		method: 'GET',
 		headers: {
+			'Authorization': `Basic ${credentials}`,
 			'Content-Type': 'application/json'
 		}
 	});
