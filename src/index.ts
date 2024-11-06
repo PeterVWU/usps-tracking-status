@@ -46,6 +46,14 @@ interface ShipStationResponse {
 	pages: number;
 }
 
+interface SearchParams {
+	tracking_number?: string;
+	order_number?: string;
+	status?: string;
+	created_after?: string;
+	created_before?: string;
+}
+
 // CORS headers configuration
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*', // You should restrict this to your domain in production
@@ -53,6 +61,7 @@ const CORS_HEADERS = {
 	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 	'Access-Control-Max-Age': '86400', // 24 hours
 };
+
 // Handle CORS preflight requests
 function handleOptions(request: Request) {
 	return new Response(null, {
@@ -63,14 +72,17 @@ function handleOptions(request: Request) {
 export default {
 	// Handle incoming requests
 	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-
 		// Handle CORS preflight requests
 		if (request.method === 'OPTIONS') {
 			return handleOptions(request);
 		}
 
-
 		const url = new URL(request.url);
+
+		// Route for searching tracking numbers
+		if (url.pathname === '/search') {
+			return await handleSearch(url, env);
+		}
 
 		// Route for getting tracking URLs to process
 		if (url.pathname === '/tracking-urls') {
@@ -106,6 +118,84 @@ export default {
 	}
 } satisfies ExportedHandler<Env>;
 
+function parseSearchValue(value: string): { operation: string, value: string } {
+	if (value.startsWith('!')) {
+		return { operation: '!=', value: value.substring(1) };
+	}
+	return { operation: '=', value };
+}
+
+async function handleSearch(url: URL, env: Env) {
+	try {
+		const params: SearchParams = {
+			tracking_number: url.searchParams.get('tracking_number') || undefined,
+			order_number: url.searchParams.get('order_number') || undefined,
+			status: url.searchParams.get('status') || undefined,
+			created_after: url.searchParams.get('created_after') || undefined,
+			created_before: url.searchParams.get('created_before') || undefined,
+		};
+
+		// Build the SQL query dynamically based on provided parameters
+		let sql = 'SELECT * FROM tracking_numbers WHERE 1=1';
+		const bindings: any[] = [];
+
+		if (params.tracking_number) {
+			const { operation, value } = parseSearchValue(params.tracking_number);
+			if (operation === '!=') {
+				sql += ' AND tracking_number NOT LIKE ?';
+			} else {
+				sql += ' AND tracking_number LIKE ?';
+			}
+			bindings.push(`%${value}%`);
+		}
+
+		if (params.order_number) {
+			const { operation, value } = parseSearchValue(params.order_number);
+			if (operation === '!=') {
+				sql += ' AND order_number NOT LIKE ?';
+			} else {
+				sql += ' AND order_number LIKE ?';
+			}
+			bindings.push(`%${value}%`);
+		}
+
+		if (params.status) {
+			const { operation, value } = parseSearchValue(params.status);
+			sql += ` AND status ${operation} ?`;
+			bindings.push(value);
+		}
+
+		if (params.created_after) {
+			sql += ' AND created_at >= datetime(?)';
+			bindings.push(params.created_after);
+		}
+
+		if (params.created_before) {
+			sql += ' AND created_at <= datetime(?)';
+			bindings.push(params.created_before);
+		}
+
+		sql += ' ORDER BY created_at DESC LIMIT 1000';  // Add reasonable limit
+
+		const stmt = env.STATUS_DB.prepare(sql);
+		const result = await stmt.bind(...bindings).all<TrackingNumber>();
+
+		return Response.json({
+			results: result.results,
+			count: result.results.length
+		}, {
+			headers: {
+				...CORS_HEADERS,
+				'Content-Type': 'application/json'
+			}
+		});
+	} catch (error: any) {
+		return Response.json(
+			{ error: error?.message || 'Failed to search tracking numbers' },
+			{ status: 500 }
+		);
+	}
+}
 
 async function handleGetTrackingUrls(env: Env) {
 	try {
