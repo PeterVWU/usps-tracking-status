@@ -41,6 +41,9 @@ interface ShipStationResponse {
 		trackingNumber: string;
 		orderNumber: string;
 	}>;
+	total: number;
+	page: number;
+	pages: number;
 }
 
 // CORS headers configuration
@@ -167,14 +170,7 @@ async function handleStatusUpdates(request: Request, env: Env) {
 	}
 }
 
-async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
-	const yesterday = new Date();
-	yesterday.setDate(yesterday.getDate() - 1);
-	const dateStr = yesterday.toISOString().split('T')[0];
-	console.log('dateStr', dateStr)
-	const url = `https://ssapi.shipstation.com/shipments?shipDateStart=${dateStr}`;
-	console.log('shipstation url', url);
-	const credentials = btoa(`${env.SHIPSTATION_API_KEY}:${env.SHIPSTATION_API_SECRET}`);
+async function fetchShipStationPage(url: string, credentials: string): Promise<ShipStationResponse> {
 	const response = await fetch(url, {
 		method: 'GET',
 		headers: {
@@ -182,24 +178,46 @@ async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
 			'Content-Type': 'application/json'
 		}
 	});
-	console.log('shipstationrespoonse', JSON.stringify(response))
+
 	if (!response.ok) {
 		const text = await response.text();
 		throw new Error(`ShipStation API error: ${response.status} - ${text}`);
 	}
 
-	try {
-		const data = await response.json() as ShipStationResponse;
-		if (!data.shipments) {
-			throw new Error('Invalid response format: missing shipments array');
-		}
-		return data.shipments.map(shipment => ({
-			trackingNumber: shipment.trackingNumber,
-			orderNumber: shipment.orderNumber,
-		}));
-	} catch (error: any) {
-		throw new Error(`Failed to parse ShipStation response: ${error?.message || 'Unknown error'}`);
+	const data = await response.json() as ShipStationResponse;
+	if (!data.shipments) {
+		throw new Error('Invalid response format: missing shipments array');
 	}
+
+	return data;
+}
+
+async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
+	const yesterday = new Date();
+	yesterday.setDate(yesterday.getDate() - 1);
+	const dateStr = yesterday.toISOString().split('T')[0];
+	console.log('dateStr', dateStr);
+
+	const credentials = btoa(`${env.SHIPSTATION_API_KEY}:${env.SHIPSTATION_API_SECRET}`);
+	const baseUrl = `https://ssapi.shipstation.com/shipments?shipDateStart=${dateStr}`;
+
+	// Get first page and total pages
+	const firstPageData = await fetchShipStationPage(baseUrl, credentials);
+	let allShipments = [...firstPageData.shipments];
+
+	// Fetch remaining pages if they exist
+	if (firstPageData.pages > 1) {
+		for (let page = 2; page <= firstPageData.pages; page++) {
+			const pageUrl = `${baseUrl}&page=${page}`;
+			const pageData = await fetchShipStationPage(pageUrl, credentials);
+			allShipments = [...allShipments, ...pageData.shipments];
+		}
+	}
+
+	return allShipments.map(shipment => ({
+		trackingNumber: shipment.trackingNumber,
+		orderNumber: shipment.orderNumber,
+	}));
 }
 
 async function storeNewTrackingNumbers(shipments: ShipmentData[], db: D1Database) {
