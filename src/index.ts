@@ -176,7 +176,7 @@ async function handleSearch(url: URL, env: Env) {
 			bindings.push(params.created_before);
 		}
 
-		sql += ' ORDER BY created_at ASC LIMIT 1000';  // Add reasonable limit
+		sql += ' ORDER BY created_at ASC LIMIT 2000';  // Add reasonable limit
 
 		const stmt = env.STATUS_DB.prepare(sql);
 		const result = await stmt.bind(...bindings).all<TrackingNumber>();
@@ -205,7 +205,7 @@ async function handleGetTrackingUrls(env: Env) {
 			SELECT tracking_number 
 			FROM tracking_numbers 
 			WHERE status != 'delivered'
-			LIMIT 1000
+			LIMIT 2000
 		`).all<TrackingNumber>();
 
 		const trackingNumbers = result.results.map(row => row.tracking_number);
