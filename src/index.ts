@@ -97,7 +97,8 @@ export default {
 		// Add a test endpoint for scheduled job
 		if (url.pathname === '/test-scheduled') {
 			try {
-				const shipments = await fetchNewShipments(env);
+				const daysBack = Number(url.searchParams.get('days_back')) || 1;
+				const shipments = await fetchNewShipments(daysBack, env);
 				await storeNewTrackingNumbers(shipments, env.STATUS_DB);
 				return Response.json({ shipments });
 			} catch (error: any) {
@@ -110,7 +111,7 @@ export default {
 	// Scheduled task to fetch from ShipStation
 	async scheduled(controller, env, ctx) {
 		try {
-			const shipments = await fetchNewShipments(env);
+			const shipments = await fetchNewShipments(1, env);
 			await storeNewTrackingNumbers(shipments, env.STATUS_DB);
 		} catch (error) {
 			console.error('Scheduled task error:', error);
@@ -175,7 +176,7 @@ async function handleSearch(url: URL, env: Env) {
 			bindings.push(params.created_before);
 		}
 
-		sql += ' ORDER BY created_at DESC LIMIT 1000';  // Add reasonable limit
+		sql += ' ORDER BY created_at ASC LIMIT 1000';  // Add reasonable limit
 
 		const stmt = env.STATUS_DB.prepare(sql);
 		const result = await stmt.bind(...bindings).all<TrackingNumber>();
@@ -282,9 +283,9 @@ async function fetchShipStationPage(url: string, credentials: string): Promise<S
 	return data;
 }
 
-async function fetchNewShipments(env: Env): Promise<ShipmentData[]> {
+async function fetchNewShipments(daysBack: number, env: Env): Promise<ShipmentData[]> {
 	const yesterday = new Date();
-	yesterday.setDate(yesterday.getDate() - 1);
+	yesterday.setDate(yesterday.getDate() - daysBack);
 	const dateStr = yesterday.toISOString().split('T')[0];
 	console.log('dateStr', dateStr);
 
